@@ -79,6 +79,7 @@ main{max-width:980px;margin:0 auto;padding:var(--pad);padding-bottom:80px}
 .day .dow{font-size:13px;color:var(--muted);margin-left:2px}
 .day .dow.sat{color:#1e40af}
 .day .dow.sun{color:#b91c1c}
+.day .hol-name{display:inline-block;margin-left:6px;font-size:11px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;vertical-align:middle}
 .day .summary-line{font-size:12px;color:var(--muted);font-family:var(--mono)}
 .day .summary-line.has{color:var(--ink);font-weight:500}
 .day .summary-line.has::before{content:"⏱ ";color:var(--accent)}
@@ -105,8 +106,17 @@ main{max-width:980px;margin:0 auto;padding:var(--pad);padding-bottom:80px}
 .quick-pad button{font-size:11px;padding:3px 8px;min-height:26px;background:#fff;border-color:var(--border)}
 .quick-pad button.suggestion{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 
-.biz-row{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;margin-top:8px}
-.biz-row select{font-family:var(--sans)}
+.biz-section{margin-top:8px;padding:8px;background:#f8fafc;border:1px solid var(--border);border-radius:8px}
+.biz-summary{display:flex;align-items:center;gap:8px}
+.biz-summary .biz-cap{font-size:11px;color:var(--muted);background:#e5e7eb;padding:2px 7px;border-radius:4px;flex-shrink:0}
+.biz-summary .biz-val{flex:1;font-size:13px;font-weight:600;color:#1e3a8a}
+.biz-summary .biz-toggle{font-size:11px;padding:3px 12px;min-height:26px;background:#fff;border-color:var(--border);flex-shrink:0}
+.biz-editor{display:none;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+.biz-section[data-biz-open="1"] .biz-editor{display:block}
+.biz-section[data-biz-open="1"] .biz-summary .biz-toggle{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.code-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.code-tabs button{font-size:12px;padding:5px 9px;min-height:30px;background:#fff;border:1px solid var(--border);border-radius:6px}
+.code-tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 
 .templates{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .templates button{font-size:11px;padding:3px 8px;min-height:24px;background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}
@@ -225,7 +235,7 @@ main{max-width:980px;margin:0 auto;padding:var(--pad);padding-bottom:80px}
       <button class="ghost" id="btn-collapse-all">全部閉じる</button>
     </span>
   </h2>
-  <div id="hint-empty" class="hint hide">勤務形態を「空白(通常)」のままにすると平日扱い、土日は自動で休日扱いになります。祝日は「休」を選択してください。</div>
+  <div id="hint-empty" class="hint hide">勤務形態を「空白(通常)」のままにすると平日扱い、土日・祝日は自動で休日扱いになります。</div>
   <div class="days" id="days"></div>
 </section>
 
@@ -257,9 +267,17 @@ main{max-width:980px;margin:0 auto;padding:var(--pad);padding-bottom:80px}
 
     <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
 
-    <div class="field"><label>日本の祝日 (yyyy-mm-dd 形式, カンマ区切り)</label>
-      <textarea id="holidays" rows="2" placeholder="例: 2026-04-29,2026-05-03,2026-05-04,2026-05-05"></textarea>
-      <small style="color:var(--muted)">設定した日付は休日扱いされます</small>
+    <div class="field"><label>祝日の扱い</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="use-jp-holidays" style="width:auto;min-height:auto">
+        <span>日本の祝日をカレンダー通り休日扱いにする</span>
+      </label>
+      <small style="color:var(--muted)">国立天文台の暦要項に基づく公式の祝日（振替休日・国民の休日を含む / 2025〜2027年に対応）</small>
+    </div>
+
+    <div class="field"><label>追加の休日 (yyyy-mm-dd 形式, カンマ区切り)</label>
+      <textarea id="holidays" rows="2" placeholder="例: 2026-12-29,2026-12-30,2026-12-31"></textarea>
+      <small style="color:var(--muted)">年末年始や病院独自の休日など、上記の祝日以外で休日扱いしたい日を入力</small>
     </div>
 
     <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
@@ -298,6 +316,11 @@ main{max-width:980px;margin:0 auto;padding:var(--pad);padding-bottom:80px}
 // CONSTANTS
 // ============================================================
 const BIZ_CODES = ['①分娩','②手術','③検査','④重症患者','⑤救急患者','⑥外来患者','⑦入院診療','⑧オンコール'];
+// 業務コード・内容のデフォルト (変更しない限りこの値が使われる)
+const DEFAULT_CODE = '⑦入院診療';
+const DEFAULT_CONTENT = 'カンファレンス・病棟業務';
+function effectiveCode(day){ return (day && day.code) ? day.code : DEFAULT_CODE; }
+function effectiveContent(day){ return (day && day.content) ? day.content : DEFAULT_CONTENT; }
 const SHIFTS = [
   {v:'', label:'(空白) 通常勤務', short:''},
   {v:'休', label:'休 (休日)', short:'休'},
@@ -312,10 +335,51 @@ const QUICK_START = ['7:30','8:30','17:30','18:00'];
 const QUICK_END_DELTAS = [30, 60, 90, 120, 180]; // minutes after start
 
 // ============================================================
+// 日本の祝日 (国立天文台 暦要項に基づく公式データ。振替休日・国民の休日を含む)
+// 出典: 国立天文台暦計算室 https://eco.mtk.nao.ac.jp/koyomi/yoko/
+// ============================================================
+const JP_HOLIDAYS = {
+  // 2025年 (令和7年)
+  '2025-01-01':'元日', '2025-01-13':'成人の日', '2025-02-11':'建国記念の日',
+  '2025-02-23':'天皇誕生日', '2025-02-24':'休日(振替)', '2025-03-20':'春分の日',
+  '2025-04-29':'昭和の日', '2025-05-03':'憲法記念日', '2025-05-04':'みどりの日',
+  '2025-05-05':'こどもの日', '2025-05-06':'休日(振替)', '2025-07-21':'海の日',
+  '2025-08-11':'山の日', '2025-09-15':'敬老の日', '2025-09-23':'秋分の日',
+  '2025-10-13':'スポーツの日', '2025-11-03':'文化の日', '2025-11-23':'勤労感謝の日',
+  '2025-11-24':'休日(振替)',
+  // 2026年 (令和8年)
+  '2026-01-01':'元日', '2026-01-12':'成人の日', '2026-02-11':'建国記念の日',
+  '2026-02-23':'天皇誕生日', '2026-03-20':'春分の日', '2026-04-29':'昭和の日',
+  '2026-05-03':'憲法記念日', '2026-05-04':'みどりの日', '2026-05-05':'こどもの日',
+  '2026-05-06':'休日(振替)', '2026-07-20':'海の日', '2026-08-11':'山の日',
+  '2026-09-21':'敬老の日', '2026-09-22':'国民の休日', '2026-09-23':'秋分の日',
+  '2026-10-12':'スポーツの日', '2026-11-03':'文化の日', '2026-11-23':'勤労感謝の日',
+  // 2027年 (令和9年)
+  '2027-01-01':'元日', '2027-01-11':'成人の日', '2027-02-11':'建国記念の日',
+  '2027-02-23':'天皇誕生日', '2027-03-21':'春分の日', '2027-03-22':'休日(振替)',
+  '2027-04-29':'昭和の日', '2027-05-03':'憲法記念日', '2027-05-04':'みどりの日',
+  '2027-05-05':'こどもの日', '2027-07-19':'海の日', '2027-08-11':'山の日',
+  '2027-09-20':'敬老の日', '2027-09-23':'秋分の日', '2027-10-11':'スポーツの日',
+  '2027-11-03':'文化の日', '2027-11-23':'勤労感謝の日'
+};
+
+// ============================================================
 // STATE
 // ============================================================
 let state = loadState();
-let currentMonth = ymKey(new Date()); // "yyyy-mm"
+// 今日の日付が含まれる「報告月」を返す
+// 報告期間は前月21日〜当月20日。21日以降は翌月報告分にあたる
+function currentReportMonth(){
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth() + 1; // 1-12
+  if(now.getDate() >= 21){
+    m += 1;
+    if(m > 12){ m = 1; y += 1; }
+  }
+  return `${y}-${String(m).padStart(2,'0')}`;
+}
+let currentMonth = currentReportMonth(); // "yyyy-mm"
 
 function defaultState(){
   return {
@@ -324,7 +388,8 @@ function defaultState(){
     templates:[
       {code:'⑦入院診療', content:'カンファレンス・病棟業務'}
     ],
-    holidays:''
+    holidays:'',
+    useJpHolidays:true
   };
 }
 function loadState(){
@@ -377,7 +442,16 @@ const DOW_JA = ['日','月','火','水','木','金','土'];
 function dowJa(d){ return DOW_JA[d.getDay()]; }
 
 function getHolidaySet(){
-  return new Set((state.holidays||'').split(/[,\s]+/).filter(Boolean));
+  const s = new Set((state.holidays||'').split(/[,\s]+/).filter(Boolean));
+  if(state.useJpHolidays !== false){
+    for(const dateStr in JP_HOLIDAYS) s.add(dateStr);
+  }
+  return s;
+}
+// 祝日名 (公式祝日のみ。カレンダー通り休日扱いが有効なときに名前を返す)
+function getHolidayName(d){
+  if(state.useJpHolidays === false) return '';
+  return JP_HOLIDAYS[ymdKey(d)] || '';
 }
 function isWeekend(d){ return d.getDay() === 0 || d.getDay() === 6; }
 function isHoliday(d){ return getHolidaySet().has(ymdKey(d)); }
@@ -536,6 +610,8 @@ function renderDays(){
 
     const dow = dowJa(d);
     const dowCls = d.getDay()===0?'sun':(d.getDay()===6?'sat':'');
+    const holName = getHolidayName(d);
+    const holLabel = holName ? `<span class="hol-name">${holName}</span>` : '';
     const shiftTag = dayData?.shift ? `<span class="shift-tag ${dayData.shift==='宿'||dayData.shift==='宿(休)'||dayData.shift==='日'||dayData.shift==='宿日'?'duty':'holi'}">${dayData.shift}</span>` : '';
     let summaryLine = '';
     if(hasData && totalMin > 0){
@@ -549,7 +625,7 @@ function renderDays(){
 
     card.innerHTML = `
       <div class="day-head" data-toggle>
-        <div><span class="date">${d.getMonth()+1}/${d.getDate()}</span><span class="dow ${dowCls}"> (${dow})</span></div>
+        <div><span class="date">${d.getMonth()+1}/${d.getDate()}</span><span class="dow ${dowCls}"> (${dow})</span>${holLabel}</div>
         <div>${summaryLine}</div>
         <div>${shiftTag}</div>
         <div class="chev">›</div>
@@ -600,9 +676,23 @@ function renderDayBody(card, date){
       ${day.slots.length < 3 ? `<button class="ghost" data-add-slot style="margin-top:4px">+ 時間帯を追加</button>` : ''}
     </div>
 
-    <div class="biz-row">
-      <div class="field"><label style="font-size:11px;color:var(--muted)">業務コード</label>${codeSelectHtml(day.code)}</div>
-      <div class="field"><label style="font-size:11px;color:var(--muted)">業務内容</label><input data-field="content" value="${escapeHtml(day.content||'')}" placeholder="例: カンファレンス・病棟業務"></div>
+    <div class="biz-section" data-biz-open="${window._bizOpen && window._bizOpen.has(key) ? '1':'0'}">
+      <div class="biz-summary">
+        <span class="biz-cap">業務</span>
+        <span class="biz-val" data-biz-val>${effectiveCode(day)} ・ ${escapeHtml(effectiveContent(day))}</span>
+        <button class="biz-toggle" data-biz-toggle>変更</button>
+      </div>
+      <div class="biz-editor">
+        <label style="font-size:11px;color:var(--muted)">業務コード（タブで選択）</label>
+        <div class="code-tabs">
+          ${BIZ_CODES.map(c=>`<button data-code-tab="${c}" class="${c===effectiveCode(day)?'active':''}">${c}</button>`).join('')}
+        </div>
+        <label style="font-size:11px;color:var(--muted);margin-top:8px;display:block">業務内容</label>
+        <input data-field="content" value="${escapeHtml(day.content||'')}" placeholder="${DEFAULT_CONTENT}">
+        <div style="text-align:right;margin-top:6px">
+          <button class="ghost" data-biz-toggle style="font-size:11px">閉じる</button>
+        </div>
+      </div>
     </div>
 
     <div class="templates" data-templates></div>
@@ -624,11 +714,28 @@ function renderDayBody(card, date){
     saveState(); renderSummary();
     updateSummaryLine(card, date, day);
   });
-  body.querySelector('[data-field="code"]').addEventListener('change', e=>{
-    day.code = e.target.value; saveState();
+  // 業務欄: 折りたたみトグル
+  window._bizOpen = window._bizOpen || new Set();
+  const bizSection = body.querySelector('.biz-section');
+  body.querySelectorAll('[data-biz-toggle]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const open = bizSection.dataset.bizOpen === '1';
+      bizSection.dataset.bizOpen = open ? '0' : '1';
+      if(open) window._bizOpen.delete(key); else window._bizOpen.add(key);
+    });
+  });
+  // 業務コード: タブ選択
+  body.querySelectorAll('[data-code-tab]').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      day.code = tab.dataset.codeTab;
+      body.querySelectorAll('[data-code-tab]').forEach(t=>t.classList.toggle('active', t===tab));
+      body.querySelector('[data-biz-val]').textContent = effectiveCode(day) + ' ・ ' + effectiveContent(day);
+      saveState();
+    });
   });
   body.querySelector('[data-field="content"]').addEventListener('input', e=>{
     day.content = e.target.value; saveState();
+    body.querySelector('[data-biz-val]').textContent = effectiveCode(day) + ' ・ ' + effectiveContent(day);
   });
 
   // Slot inputs
@@ -878,8 +985,9 @@ function buildPrintSheet(){
       const timeCell = s.start && s.end ? `${s.start}<br>〜<br>${s.end}` : '〜';
       const brkCell = s.breakStart && s.breakEnd ? `${s.breakStart}〜${s.breakEnd}` : '〜';
 
-      const codeCell = (r===0 && day.code) ? day.code : '';
-      const contentCell = (r===0 && day.content) ? escapeHtml(day.content) : '';
+      const hasSlot = (day.slots && day.slots.some(s=>s.start && s.end));
+      const codeCell = (r===0 && hasSlot) ? effectiveCode(day) : '';
+      const contentCell = (r===0 && hasSlot) ? escapeHtml(effectiveContent(day)) : '';
 
       rows += `<tr class="${dowCls} ${bgCls}">
         ${dateCell}
@@ -1176,9 +1284,9 @@ document.getElementById('btn-excel').addEventListener('click', async ()=>{
           sheet = setSheetCell(sheet, 'G' + row, bsFr, false);
           sheet = setSheetCell(sheet, 'I' + row, beFr, false);
         }
-        // 業務コード・内容 (各枠に記入)
-        if(day.code) sheet = setSheetCell(sheet, 'X' + row, day.code, true);
-        if(day.content) sheet = setSheetCell(sheet, 'Y' + row, day.content, true);
+        // 業務コード・内容 (各枠に記入。未変更ならデフォルト値)
+        sheet = setSheetCell(sheet, 'X' + row, effectiveCode(day), true);
+        sheet = setSheetCell(sheet, 'Y' + row, effectiveContent(day), true);
       });
     });
 
@@ -1232,6 +1340,7 @@ function downloadBlob(blob, filename){
 const menuModal = document.getElementById('modal-menu');
 document.getElementById('btn-menu').addEventListener('click', ()=>{
   document.getElementById('holidays').value = state.holidays || '';
+  document.getElementById('use-jp-holidays').checked = state.useJpHolidays !== false;
   renderTemplatesModal();
   menuModal.classList.add('open');
 });
@@ -1251,6 +1360,10 @@ document.getElementById('tpl-add').addEventListener('click', ()=>{
 // Holidays
 document.getElementById('holidays').addEventListener('input', e=>{
   state.holidays = e.target.value;
+  saveState(); renderSummary(); renderDays();
+});
+document.getElementById('use-jp-holidays').addEventListener('change', e=>{
+  state.useJpHolidays = e.target.checked;
   saveState(); renderSummary(); renderDays();
 });
 
